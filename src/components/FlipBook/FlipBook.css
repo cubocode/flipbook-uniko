@@ -1,0 +1,119 @@
+/* FlipBook Outer Wrapper styling */
+.flipbook-outer-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 2000px;
+}
+
+/* StPageFlip base container */
+.flipbook-container {
+  box-shadow: 0 20px 60px rgba(46, 37, 32, 0.15), 
+              0 8px 24px rgba(46, 37, 32, 0.08);
+  border-radius: 6px;
+  background-color: #fcfbf9;
+  overflow: hidden;
+  transition: opacity 0.3s ease;
+  position: relative;
+}
+
+/* Individual page sheets wrapper */
+.page-sheet {
+  background-color: #ffffff;
+  color: #322a26;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inner content area of each page */
+.page-sheet-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background-color: #ffffff;
+}
+
+/* Hard cover pages styling - dark espresso theme */
+.page-sheet[data-density="hard"] {
+  background-color: #322a26;
+  color: #fdfdfc;
+}
+
+.page-sheet[data-density="hard"] .page-sheet-content {
+  background-color: #322a26;
+  color: #fdfdfc;
+  border: 1px solid rgba(197, 160, 44, 0.25);
+  box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.4);
+}
+
+/* Inner spine shadows to give realistic paper folding depth */
+.page-sheet:not([data-density="hard"])::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 25px;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.4s ease;
+}
+
+/* For pages on the left (even-indexed pages in double page spread) */
+/* StPageFlip applies inline positioning classes which we can use for spine shadow placement */
+.stpageflip--left .page-sheet:not([data-density="hard"])::after {
+  right: 0;
+  background: linear-gradient(to left, rgba(46, 37, 32, 0.08) 0%, rgba(46, 37, 32, 0) 100%);
+  border-right: 1px solid rgba(46, 37, 32, 0.03);
+}
+
+/* For pages on the right (odd-indexed pages in double page spread) */
+.stpageflip--right .page-sheet:not([data-density="hard"])::after {
+  left: 0;
+  background: linear-gradient(to right, rgba(46, 37, 32, 0.08) 0%, rgba(46, 37, 32, 0) 100%);
+  border-left: 1px solid rgba(46, 37, 32, 0.03);
+}
+
+/* Spine shadow for the center fold when the book is lying open */
+.flipbook-container::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background-color: rgba(46, 37, 32, 0.06);
+  box-shadow: 0 0 8px rgba(46, 37, 32, 0.15);
+  pointer-events: none;
+  z-index: 15;
+}
+
+/* Adjust spine shadow for single page view (portrait orientation) */
+.stpageflip--portrait .flipbook-container::after {
+  display: none;
+}
+
+/* Subtle page edge shadows */
+.page-sheet-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  box-shadow: inset 0 0 1px rgba(197, 160, 44, 0.08);
+  pointer-events: none;
+  z-index: 9;
+}
