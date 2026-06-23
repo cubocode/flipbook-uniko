@@ -64,7 +64,11 @@ const FlipBook = forwardRef(({
   // Handle PageFlip instance creation (runs only when pages or dimensions change)
   useEffect(() => {
     console.log('[FlipBook] useEffect de inicialización invocado. Cantidad de páginas:', pages?.length, 'Dimensiones del visor:', width, 'x', height);
-    if (!parentRef.current || !pages || pages.length === 0) {
+
+    // Guardamos la referencia actual del contenedor padre en una variable local para el cleanup
+    const currentParent = parentRef.current;
+
+    if (!currentParent || !pages || pages.length === 0) {
       console.log('[FlipBook] Cancelando inicialización: contenedor padre no disponible o sin páginas');
       return;
     }
@@ -72,7 +76,7 @@ const FlipBook = forwardRef(({
     // 1. Create a fresh container div
     const bookContainer = document.createElement('div');
     bookContainer.className = 'flipbook-container';
-    parentRef.current.appendChild(bookContainer);
+    currentParent.appendChild(bookContainer);
     console.log('[FlipBook] Nuevo contenedor de flipbook creado y agregado al DOM');
 
     // 2. Create and append page elements programmatically so React does not manage them
@@ -171,8 +175,8 @@ const FlipBook = forwardRef(({
           console.warn('[FlipBook] Error al destruir PageFlip en el cleanup:', err);
         }
       }
-      if (parentRef.current && parentRef.current.contains(bookContainer)) {
-        parentRef.current.removeChild(bookContainer);
+      if (currentParent && currentParent.contains(bookContainer)) {
+        currentParent.removeChild(bookContainer);
         console.log('[FlipBook] Contenedor de flipbook eliminado del DOM');
       }
       pageFlipRef.current = null;
