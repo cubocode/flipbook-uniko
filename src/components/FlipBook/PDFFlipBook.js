@@ -68,7 +68,8 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
 
     const resizeObserver = new ResizeObserver((entries) => {
       if (!entries || entries.length === 0) return;
-      const { width, height } = entries[0].contentRect;
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
       setContainerDims({ width, height });
     });
 
@@ -275,6 +276,8 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     let bookWidth = aspectRatio.width;
     let bookHeight = aspectRatio.height;
 
+    const pageRatio = bookWidth / bookHeight;
+
     // Decide orientation (landscape/portrait) based on container size
     const isPortrait = targetWidth < 768 || targetWidth < targetHeight;
 
@@ -291,6 +294,12 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
 
       allowedWidth = Math.round(bookWidth * scale);
       allowedHeight = Math.round(bookHeight * scale);
+
+      // Force portrait mode in StPageFlip by ensuring page width is more than half of the container width
+      if (allowedWidth * 2 <= targetWidth) {
+        allowedWidth = Math.round(targetWidth / 2) + 40;
+        allowedHeight = Math.round(allowedWidth / pageRatio);
+      }
     } else {
       // In landscape, 2 pages width must fit in container
       const maxWidthForTwoPages = targetWidth - 40; // 20px padding on each side
@@ -314,8 +323,17 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     const heightScaleLimit = maxSingleHeight / allowedHeight;
     const limitScale = Math.min(widthScaleLimit, heightScaleLimit, 1);
 
-    const finalWidth = Math.max(180, Math.round(allowedWidth * limitScale));
-    const finalHeight = Math.max(240, Math.round(allowedHeight * limitScale));
+    let finalWidth = Math.round(allowedWidth * limitScale);
+    let finalHeight = Math.round(allowedHeight * limitScale);
+
+    // Again, ensure StPageFlip is forced to portrait if we are in portrait mode
+    if (isPortrait && finalWidth * 2 <= targetWidth) {
+      finalWidth = Math.round(targetWidth / 2) + 40;
+      finalHeight = Math.round(finalWidth / pageRatio);
+    }
+
+    finalWidth = Math.max(180, finalWidth);
+    finalHeight = Math.max(240, finalHeight);
 
     console.log('[PDFFlipBook] Sizing:', bookWidth, 'x', bookHeight,
                 '-> Container:', targetWidth, 'x', targetHeight,
