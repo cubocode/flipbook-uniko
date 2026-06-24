@@ -141,10 +141,22 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     setIsDragging(false);
   };
 
-  // Touch handlers for mobile
+  // Touch handlers for mobile (Pinch to zoom & Drag to pan)
   const lastTouchTime = useRef(0);
+  const pinchStartDist = useRef(0);
+  const pinchStartZoom = useRef(1);
+
   const handleTouchStart = (e) => {
-    if (e.touches.length === 1) {
+    if (e.touches.length === 2) {
+      // Pinch zoom start
+      setIsDragging(false);
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      pinchStartDist.current = Math.sqrt(dx * dx + dy * dy);
+      pinchStartZoom.current = zoom;
+    } else if (e.touches.length === 1) {
       const now = Date.now();
       if (now - lastTouchTime.current < 300) {
         if (zoom > 1) {
@@ -170,23 +182,45 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
   };
 
   const handleTouchMove = (e) => {
-    if (!isDragging || zoom === 1 || e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    const newX = (touch.clientX - dragStart.current.x) / zoom;
-    const newY = (touch.clientY - dragStart.current.y) / zoom;
+    if (e.touches.length === 2 && pinchStartDist.current > 0) {
+      // Pinch zoom in action
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
+      const currentDist = Math.sqrt(dx * dx + dy * dy);
+      
+      const scaleFactor = currentDist / pinchStartDist.current;
+      const targetZoom = Math.max(1, Math.min(3, pinchStartZoom.current * scaleFactor));
+      
+      setZoom(targetZoom);
+      if (targetZoom === 1) {
+        setPan({ x: 0, y: 0 });
+      }
 
-    const maxPanX = (scaledDims.width * zoom) / 2;
-    const maxPanY = (scaledDims.height * zoom) / 2;
+      if (e.cancelable) e.preventDefault();
+    } else if (isDragging && zoom > 1 && e.touches.length === 1) {
+      // Drag pan in action
+      const touch = e.touches[0];
+      const newX = (touch.clientX - dragStart.current.x) / zoom;
+      const newY = (touch.clientY - dragStart.current.y) / zoom;
 
-    setPan({
-      x: Math.max(-maxPanX, Math.min(maxPanX, newX)),
-      y: Math.max(-maxPanY, Math.min(maxPanY, newY))
-    });
+      const maxPanX = (scaledDims.width * zoom) / 2;
+      const maxPanY = (scaledDims.height * zoom) / 2;
 
-    if (e.cancelable) e.preventDefault();
+      setPan({
+        x: Math.max(-maxPanX, Math.min(maxPanX, newX)),
+        y: Math.max(-maxPanY, Math.min(maxPanY, newY))
+      });
+
+      if (e.cancelable) e.preventDefault();
+    }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      pinchStartDist.current = 0;
+    }
     setIsDragging(false);
   };
 
@@ -501,6 +535,16 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
 
   return (
     <div ref={viewerRef} className={`pdf-viewer-wrapper ${isFullscreen ? 'fullscreen-mode' : ''}`}>
+      {/* Floating exit fullscreen close button (for iOS/Safari) */}
+      {isFullscreen && (
+        <button
+          className="fullscreen-close-btn"
+          onClick={toggleFullscreen}
+          title="Salir de pantalla completa"
+        >
+          ×
+        </button>
+      )}
       {/* Loading Overlay */}
       {loading && (
         <div className="pdf-loading-overlay">
@@ -571,17 +615,19 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <FlipBook
-              key={`${pages.length}-${scaledDims.width}-${scaledDims.height}`}
-              ref={bookRef}
-              pages={pages}
-              width={scaledDims.width}
-              height={scaledDims.height}
-              showCover={true}
-              onFlip={(index) => setCurrentPage(index)}
-              onChangeOrientation={(orient) => setOrientation(orient)}
-              className="pdf-flipbook-instance"
-            />
+            <div style={{ pointerEvents: zoom > 1 ? 'none' : 'auto' }}>
+              <FlipBook
+                key={`${pages.length}-${scaledDims.width}-${scaledDims.height}`}
+                ref={bookRef}
+                pages={pages}
+                width={scaledDims.width}
+                height={scaledDims.height}
+                showCover={true}
+                onFlip={(index) => setCurrentPage(index)}
+                onChangeOrientation={(orient) => setOrientation(orient)}
+                className="pdf-flipbook-instance"
+              />
+            </div>
           </div>
         ) : (
           !loading && (
