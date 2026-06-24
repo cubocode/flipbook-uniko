@@ -145,3 +145,22 @@ body {
     font-size: 2.2rem;
   }
 }
+
+@media (max-width: 768px) {
+  .app-header {
+    padding: 25px 15px 15px 15px;
+  }
+  
+  .brand-title {
+    font-size: 2rem;
+  }
+  
+  .app-main-content {
+    padding: 0 8px 40px 8px; /* Reduce side padding on mobile to save screen width */
+  }
+  
+  .viewer-container-outer {
+    padding: 6px; /* Save inner padding */
+    border-radius: 12px;
+  }
+}

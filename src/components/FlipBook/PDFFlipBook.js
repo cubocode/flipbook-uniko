@@ -49,6 +49,34 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
   const bookRef = useRef(null);
   const viewerRef = useRef(null);
   const fileInputRef = useRef(null);
+  const mainContentRef = useRef(null);
+
+  const [containerDims, setContainerDims] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 768;
+      const estWidth = isMobile ? window.innerWidth - 40 : Math.min(1100, window.innerWidth) - 80;
+      const estHeight = isMobile ? 420 : 580;
+      return { width: estWidth, height: estHeight };
+    }
+    return { width: 600, height: 500 };
+  });
+
+  // Track container dimensions using ResizeObserver
+  useEffect(() => {
+    const element = mainContentRef.current;
+    if (!element) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      const { width, height } = entries[0].contentRect;
+      setContainerDims({ width, height });
+    });
+
+    resizeObserver.observe(element);
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // Load PDF on url change
   useEffect(() => {
@@ -239,22 +267,60 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     return `Pág. ${currentPage + 1} de ${numPages}`;
   };
 
-  // Calculate scaled dimensions to fit within reasonable limits
+  // Calculate scaled dimensions to fit within the container
   const getScaledDimensions = () => {
-    const maxSingleWidth = 450;
-    const maxSingleHeight = 600;
+    const targetWidth = containerDims.width;
+    const targetHeight = containerDims.height;
 
     let bookWidth = aspectRatio.width;
     let bookHeight = aspectRatio.height;
 
-    const widthRatio = maxSingleWidth / bookWidth;
-    const heightRatio = maxSingleHeight / bookHeight;
-    const scale = Math.min(widthRatio, heightRatio, 1);
+    // Decide orientation (landscape/portrait) based on container size
+    const isPortrait = targetWidth < 768 || targetWidth < targetHeight;
 
-    const finalWidth = Math.round(bookWidth * scale);
-    const finalHeight = Math.round(bookHeight * scale);
+    let allowedWidth, allowedHeight;
 
-    console.log('[PDFFlipBook] Sizing:', aspectRatio.width, 'x', aspectRatio.height, '-> Scaled:', finalWidth, 'x', finalHeight, 'scale:', scale);
+    if (isPortrait) {
+      // In portrait, 1 page width must fit in container
+      const maxWidth = targetWidth - 20; // 10px padding on each side
+      const maxHeight = targetHeight - 20;
+
+      const widthScale = maxWidth / bookWidth;
+      const heightScale = maxHeight / bookHeight;
+      const scale = Math.min(widthScale, heightScale, 1);
+
+      allowedWidth = Math.round(bookWidth * scale);
+      allowedHeight = Math.round(bookHeight * scale);
+    } else {
+      // In landscape, 2 pages width must fit in container
+      const maxWidthForTwoPages = targetWidth - 40; // 20px padding on each side
+      const maxHeight = targetHeight - 20;
+
+      const maxWidthForOnePage = maxWidthForTwoPages / 2;
+
+      const widthScale = maxWidthForOnePage / bookWidth;
+      const heightScale = maxHeight / bookHeight;
+      const scale = Math.min(widthScale, heightScale, 1);
+
+      allowedWidth = Math.round(bookWidth * scale);
+      allowedHeight = Math.round(bookHeight * scale);
+    }
+
+    // Limit to reasonable max dimensions
+    const maxSingleWidth = 450;
+    const maxSingleHeight = 600;
+
+    const widthScaleLimit = maxSingleWidth / allowedWidth;
+    const heightScaleLimit = maxSingleHeight / allowedHeight;
+    const limitScale = Math.min(widthScaleLimit, heightScaleLimit, 1);
+
+    const finalWidth = Math.max(180, Math.round(allowedWidth * limitScale));
+    const finalHeight = Math.max(240, Math.round(allowedHeight * limitScale));
+
+    console.log('[PDFFlipBook] Sizing:', bookWidth, 'x', bookHeight,
+                '-> Container:', targetWidth, 'x', targetHeight,
+                '-> Mode:', isPortrait ? 'portrait' : 'landscape',
+                '-> Final Page Dims:', finalWidth, 'x', finalHeight);
 
     return {
       width: finalWidth,
@@ -312,7 +378,7 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
       </div>
 
       {/* Main View Area */}
-      <div className="pdf-main-content">
+      <div ref={mainContentRef} className="pdf-main-content">
         {pages.length > 0 ? (
           <FlipBook
             key={`${pages.length}-${scaledDims.width}-${scaledDims.height}`}
