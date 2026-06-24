@@ -434,3 +434,21 @@
     height: 400px;
   }
 }
+
+@media (max-width: 480px) {
+  .controls-center {
+    gap: 4px;
+  }
+  .controls-right {
+    gap: 2px;
+  }
+  .controls-left {
+    gap: 2px;
+  }
+  .page-indicator-badge {
+    min-width: 70px;
+    font-size: 0.7rem;
+    padding: 3px 6px;
+    border-radius: 10px;
+  }
+}

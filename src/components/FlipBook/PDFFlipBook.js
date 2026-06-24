@@ -86,11 +86,121 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     }
   }, [pdfUrl]);
 
-  // Sync fullscreen change events
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStart = useRef({ x: 0, y: 0 });
+
+  // Reset zoom and pan when page changes
+  useEffect(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, [currentPage]);
+
+  const handleZoomIn = () => {
+    setZoom(prev => Math.min(3, prev + 0.5));
+  };
+
+  const handleZoomOut = () => {
+    setZoom(prev => {
+      const nextZoom = Math.max(1, prev - 0.5);
+      if (nextZoom === 1) {
+        setPan({ x: 0, y: 0 });
+      }
+      return nextZoom;
+    });
+  };
+
+  const handleZoomReset = () => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  // Mouse Drag handlers for panning
+  const handleMouseDown = (e) => {
+    if (zoom === 1) return;
+    setIsDragging(true);
+    dragStart.current = { x: e.clientX - pan.x * zoom, y: e.clientY - pan.y * zoom };
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDragging || zoom === 1) return;
+    const newX = (e.clientX - dragStart.current.x) / zoom;
+    const newY = (e.clientY - dragStart.current.y) / zoom;
+
+    const maxPanX = (scaledDims.width * zoom) / 2;
+    const maxPanY = (scaledDims.height * zoom) / 2;
+
+    setPan({
+      x: Math.max(-maxPanX, Math.min(maxPanX, newX)),
+      y: Math.max(-maxPanY, Math.min(maxPanY, newY))
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Touch handlers for mobile
+  const lastTouchTime = useRef(0);
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      const now = Date.now();
+      if (now - lastTouchTime.current < 300) {
+        if (zoom > 1) {
+          handleZoomReset();
+        } else {
+          setZoom(2);
+          const touch = e.touches[0];
+          const rect = mainContentRef.current.getBoundingClientRect();
+          const offsetX = touch.clientX - (rect.left + rect.width / 2);
+          const offsetY = touch.clientY - (rect.top + rect.height / 2);
+          setPan({ x: -offsetX / 2, y: -offsetY / 2 });
+        }
+        e.preventDefault();
+        return;
+      }
+      lastTouchTime.current = now;
+
+      if (zoom === 1) return;
+      setIsDragging(true);
+      const touch = e.touches[0];
+      dragStart.current = { x: touch.clientX - pan.x * zoom, y: touch.clientY - pan.y * zoom };
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDragging || zoom === 1 || e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const newX = (touch.clientX - dragStart.current.x) / zoom;
+    const newY = (touch.clientY - dragStart.current.y) / zoom;
+
+    const maxPanX = (scaledDims.width * zoom) / 2;
+    const maxPanY = (scaledDims.height * zoom) / 2;
+
+    setPan({
+      x: Math.max(-maxPanX, Math.min(maxPanX, newX)),
+      y: Math.max(-maxPanY, Math.min(maxPanY, newY))
+    });
+
+    if (e.cancelable) e.preventDefault();
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  // Sync fullscreen change events (native and fallback)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-      // Trigger a resize event to make StPageFlip update its layout
+      const isFS = !!(
+        document.fullscreenElement ||
+        document.webkitFullscreenElement ||
+        document.mozFullScreenElement ||
+        document.msFullscreenElement
+      );
+      setIsFullscreen(isFS);
+      
       setTimeout(() => {
         if (bookRef.current?.getPageFlip()) {
           bookRef.current.getPageFlip().update();
@@ -101,11 +211,13 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
 
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
   }, []);
 
@@ -225,18 +337,57 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
     const element = viewerRef.current;
     if (!element) return;
 
-    if (!document.fullscreenElement) {
-      if (element.requestFullscreen) {
-        element.requestFullscreen();
-      } else if (element.webkitRequestFullscreen) {
-        element.webkitRequestFullscreen();
-      } else if (element.mozRequestFullScreen) {
-        element.mozRequestFullScreen();
+    // Helper to toggle state when falling back to fake fullscreen
+    const toggleState = () => {
+      setIsFullscreen(prev => !prev);
+      setTimeout(() => {
+        if (bookRef.current?.getPageFlip()) {
+          bookRef.current.getPageFlip().update();
+        }
+      }, 300);
+    };
+
+    // Check support for native fullscreen (with vendor prefixes)
+    const hasNativeSupport = !!(
+      element.requestFullscreen ||
+      element.webkitRequestFullscreen ||
+      element.mozRequestFullScreen ||
+      element.msRequestFullscreen
+    );
+
+    if (hasNativeSupport) {
+      try {
+        if (!document.fullscreenElement && 
+            !document.webkitFullscreenElement && 
+            !document.mozFullScreenElement && 
+            !document.msFullscreenElement) {
+          if (element.requestFullscreen) {
+            element.requestFullscreen();
+          } else if (element.webkitRequestFullscreen) {
+            element.webkitRequestFullscreen();
+          } else if (element.mozRequestFullScreen) {
+            element.mozRequestFullScreen();
+          } else if (element.msRequestFullscreen) {
+            element.msRequestFullscreen();
+          }
+        } else {
+          if (document.exitFullscreen) {
+            document.exitFullscreen();
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          } else if (document.mozCancelFullScreen) {
+            document.mozCancelFullScreen();
+          } else if (document.msExitFullscreen) {
+            document.msExitFullscreen();
+          }
+        }
+      } catch (err) {
+        console.warn('Native fullscreen request failed, falling back to fake fullscreen:', err);
+        toggleState();
       }
     } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-      }
+      // Fallback: Toggle fake fullscreen manually
+      toggleState();
     }
   };
 
@@ -398,17 +549,40 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
       {/* Main View Area */}
       <div ref={mainContentRef} className="pdf-main-content">
         {pages.length > 0 ? (
-          <FlipBook
-            key={`${pages.length}-${scaledDims.width}-${scaledDims.height}`}
-            ref={bookRef}
-            pages={pages}
-            width={scaledDims.width}
-            height={scaledDims.height}
-            showCover={true}
-            onFlip={(index) => setCurrentPage(index)}
-            onChangeOrientation={(orient) => setOrientation(orient)}
-            className="pdf-flipbook-instance"
-          />
+          <div
+            className="pdf-zoom-wrapper"
+            style={{
+              transform: `scale(${zoom}) translate(${pan.x}px, ${pan.y}px)`,
+              transformOrigin: 'center center',
+              transition: isDragging ? 'none' : 'transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1)',
+              cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              touchAction: zoom > 1 ? 'none' : 'pan-y'
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <FlipBook
+              key={`${pages.length}-${scaledDims.width}-${scaledDims.height}`}
+              ref={bookRef}
+              pages={pages}
+              width={scaledDims.width}
+              height={scaledDims.height}
+              showCover={true}
+              onFlip={(index) => setCurrentPage(index)}
+              onChangeOrientation={(orient) => setOrientation(orient)}
+              className="pdf-flipbook-instance"
+            />
+          </div>
         ) : (
           !loading && (
             <div className="pdf-empty-state">
@@ -443,27 +617,6 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
               <rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </button>
-          {/*
-          <button 
-            className="control-btn" 
-            onClick={() => fileInputRef.current?.click()}
-            title="Subir propio PDF"
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-          </button>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleFileUpload} 
-            accept=".pdf" 
-            style={{ display: 'none' }} 
-          />
-          */}
-
         </div>
 
         <div className="controls-center">
@@ -495,10 +648,40 @@ const PDFFlipBook = ({ pdfUrl = DEFAULT_PDF }) => {
         </div>
 
         <div className="controls-right">
+          {/* Zoom controls */}
+          <button
+            className="control-btn"
+            onClick={handleZoomOut}
+            disabled={zoom <= 1 || pages.length === 0}
+            title="Alejar"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <line x1="8" y1="11" x2="14" y2="11"></line>
+            </svg>
+          </button>
+
+          <button
+            className="control-btn"
+            onClick={handleZoomIn}
+            disabled={zoom >= 3 || pages.length === 0}
+            title="Acercar"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              <line x1="8" y1="11" x2="14" y2="11"></line>
+              <line x1="11" y1="8" x2="11" y2="14"></line>
+            </svg>
+          </button>
+
+          {/* Fullscreen control */}
           <button
             className={`control-btn ${isFullscreen ? 'active' : ''}`}
             onClick={toggleFullscreen}
             title="Pantalla Completa"
+            disabled={pages.length === 0}
           >
             {isFullscreen ? (
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2">
